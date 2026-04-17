@@ -4,12 +4,14 @@
 //
 //  Created by Nick Waine on 4/15/26.
 //
+
 import SwiftUI
 import SwiftData
 
 struct ContentView: View {
     @Query(sort: \Player.battingOrder) private var players: [Player]
     @Environment(\.modelContext) private var context
+    @EnvironmentObject private var spotifyAuth: SpotifyAuthManager
 
     var body: some View {
         NavigationStack {
@@ -23,6 +25,38 @@ struct ContentView: View {
                         Text("Walk-Up Manager")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+                    }
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Spotify")
+                            .font(.title3)
+                            .fontWeight(.semibold)
+
+                        if let token = spotifyAuth.accessToken, !token.isEmpty {
+                            Label("Connected to Spotify", systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                        } else {
+                            Button {
+                                spotifyAuth.startLogin()
+                            } label: {
+                                HStack {
+                                    Image(systemName: "link")
+                                    Text("Connect Spotify")
+                                        .fontWeight(.semibold)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.green)
+                                .foregroundStyle(.white)
+                                .clipShape(RoundedRectangle(cornerRadius: 18))
+                            }
+
+                            if spotifyAuth.isAuthenticating {
+                                Text("Waiting for Spotify login...")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
 
                     NavigationLink {
@@ -122,6 +156,13 @@ struct ContentView: View {
             battingOrder: players.count
         )
         context.insert(newPlayer)
+
+        do {
+            try context.save()
+            print("Player saved")
+        } catch {
+            print("Failed to save player: \(error)")
+        }
     }
 
     private func normalizeBattingOrderIfNeeded() {
@@ -130,6 +171,12 @@ struct ContentView: View {
             if player.battingOrder != index {
                 player.battingOrder = index
             }
+        }
+
+        do {
+            try context.save()
+        } catch {
+            print("Failed to normalize batting order: \(error)")
         }
     }
 }
