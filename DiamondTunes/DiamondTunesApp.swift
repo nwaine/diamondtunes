@@ -16,6 +16,7 @@ struct DiamondTunesApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(spotifyAuth)
+                .tint(AppTheme.red)
                 .onOpenURL { url in
                     Task {
                         await spotifyAuth.handleCallback(url: url)

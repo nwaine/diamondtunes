@@ -100,12 +100,10 @@ struct PlayerDetailView: View {
                                     "m:ss",
                                     text: Binding(
                                         get: {
-                                            formattedTime(player.songs[index].startTimeSeconds)
+                                            formattedTime(song.startTimeSeconds)
                                         },
                                         set: { newValue in
-                                            if let seconds = parseTimeToSeconds(newValue) {
-                                                player.songs[index].startTimeSeconds = seconds
-                                            }
+                                            updateStartTime(for: song, with: newValue)
                                         }
                                     )
                                 )
@@ -168,6 +166,13 @@ struct PlayerDetailView: View {
         }
 
         player.songs.remove(atOffsets: offsets)
+    }
+
+    private func updateStartTime(for song: WalkupSong, with input: String) {
+        guard let seconds = parseTimeToSeconds(input) else { return }
+        guard let currentIndex = player.songs.firstIndex(of: song) else { return }
+
+        player.songs[currentIndex].startTimeSeconds = seconds
     }
 
     private func loadMetadataForSongs() async {

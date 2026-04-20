@@ -31,6 +31,7 @@ struct GameModeView: View {
                         Text("Game Mode")
                             .font(.largeTitle)
                             .fontWeight(.bold)
+                            .foregroundStyle(AppTheme.textPrimary)
 
                         Text(
                             editMode?.wrappedValue.isEditing == true
@@ -38,7 +39,7 @@ struct GameModeView: View {
                             : "Tap a player to trigger walk-up music."
                         )
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppTheme.textSecondary)
                     }
 
                     if showDeviceWarning {
@@ -48,12 +49,12 @@ struct GameModeView: View {
 
                             Text("Open Spotify on your phone and start playback once to activate the device.")
                                 .font(.subheadline)
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(AppTheme.textPrimary)
 
                             Spacer()
                         }
                         .padding()
-                        .background(Color.orange.opacity(0.15))
+                        .background(Color.orange.opacity(0.12))
                         .clipShape(RoundedRectangle(cornerRadius: 16))
                     }
                 }
@@ -66,10 +67,11 @@ struct GameModeView: View {
                     VStack(spacing: 12) {
                         Text("No players in roster")
                             .font(.headline)
+                            .foregroundStyle(AppTheme.textPrimary)
 
                         Text("Add players before starting game mode.")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppTheme.textSecondary)
                             .multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: .infinity)
@@ -81,29 +83,30 @@ struct GameModeView: View {
                         HStack(spacing: 14) {
                             ZStack {
                                 Circle()
-                                    .fill(Color.black)
+                                    .fill(AppTheme.lineupBadgeFill)
 
                                 Text("\(player.battingOrder + 1)")
                                     .font(.subheadline)
                                     .fontWeight(.bold)
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(AppTheme.lineupBadgeText)
                             }
-                            .frame(width: 36, height: 36)
+                            .frame(width: 38, height: 38)
 
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(player.name)
                                     .font(.headline)
+                                    .foregroundStyle(AppTheme.textPrimary)
 
                                 Text("\(player.songs.count) song\(player.songs.count == 1 ? "" : "s")")
                                     .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(AppTheme.textSecondary)
                             }
 
                             Spacer()
 
                             if editMode?.wrappedValue.isEditing == true {
                                 Image(systemName: "line.3.horizontal")
-                                    .foregroundStyle(.tertiary)
+                                    .foregroundStyle(AppTheme.textSecondary)
                             } else {
                                 Button {
                                     Task {
@@ -116,38 +119,54 @@ struct GameModeView: View {
                                 } label: {
                                     ZStack {
                                         Circle()
-                                            .stroke(Color.gray.opacity(0.2), lineWidth: 4)
-                                            .frame(width: 40, height: 40)
+                                            .fill(Color.white)
+
+                                        Circle()
+                                            .stroke(AppTheme.controlRingTrack, lineWidth: 4)
 
                                         if isCurrentlyPlaying(player) {
                                             Circle()
                                                 .trim(from: 0, to: playbackProgress)
                                                 .stroke(
-                                                    Color.green,
+                                                    AppTheme.controlRingProgress,
                                                     style: StrokeStyle(lineWidth: 4, lineCap: .round)
                                                 )
                                                 .rotationEffect(.degrees(-90))
-                                                .frame(width: 40, height: 40)
 
                                             Image(systemName: "stop.fill")
                                                 .font(.system(size: 14, weight: .bold))
-                                                .foregroundStyle(.primary)
+                                                .foregroundStyle(AppTheme.controlIcon)
                                         } else {
                                             Image(systemName: "play.fill")
                                                 .font(.system(size: 14, weight: .bold))
-                                                .foregroundStyle(.primary)
+                                                .foregroundStyle(AppTheme.controlIcon)
                                         }
                                     }
+                                    .frame(width: 42, height: 42)
                                 }
                                 .buttonStyle(.plain)
                             }
                         }
-                        .padding(.vertical, 4)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 18)
+                                .fill(AppTheme.surface)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 18)
+                                .stroke(AppTheme.border, lineWidth: 1)
+                        )
+                        .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+                        .listRowBackground(Color.clear)
                     }
                     .onMove(perform: movePlayers)
                 }
             }
         }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(AppTheme.background)
         .navigationTitle("Game Mode")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -214,8 +233,6 @@ struct GameModeView: View {
             }
 
             startPlaybackTimeline(accessToken: token)
-
-            print("Playing \(trackURI) from \(selected.startTimeSeconds)s")
         } catch {
             print("Playback failed: \(error)")
 
