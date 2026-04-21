@@ -1,10 +1,3 @@
-//
-//  PlayerDetailView.swift
-//  DiamondTunes
-//
-//  Created by Nick Waine on 4/15/26.
-//
-
 import SwiftUI
 import SwiftData
 
@@ -14,11 +7,14 @@ struct PlayerDetailView: View {
 
     @State private var newSongInput = ""
     @State private var newSongStartTimeText = "0:00"
-
-    private let maxSongs = 3
-
     @State private var trackMetadata: [String: SpotifyTrack] = [:]
     @State private var failedSongs: Set<String> = []
+    @State private var searchText = ""
+    @State private var searchResults: [SpotifyTrack] = []
+    @State private var isSearching = false
+    @State private var searchError: String?
+
+    private let maxSongs = 3
 
     var body: some View {
         Form {
@@ -26,7 +22,61 @@ struct PlayerDetailView: View {
                 TextField("Name", text: $player.name)
             }
 
-            Section("Add Walkup Song") {
+            Section("Find Walkup Song") {
+                if spotifyAuth.isConnected {
+                    TextField("Search Spotify", text: $searchText)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+
+                    Button("Search") {
+                        Task {
+                            await runTrackSearch()
+                        }
+                    }
+                    .disabled(searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || player.songs.count >= maxSongs)
+
+                    if isSearching {
+                        ProgressView("Searching Spotify...")
+                    }
+
+                    if let searchError {
+                        Text(searchError)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+
+                    if !searchResults.isEmpty {
+                        ForEach(searchResults, id: \.id) { track in
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(track.name)
+                                    .font(.headline)
+
+                                Text(track.artistLine)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+
+                                HStack {
+                                    TextField("Start Time (m:ss)", text: $newSongStartTimeText)
+                                        .keyboardType(.numbersAndPunctuation)
+                                        .textInputAutocapitalization(.never)
+                                        .autocorrectionDisabled()
+
+                                    Button("Use This Song") {
+                                        addSong(from: track)
+                                    }
+                                    .disabled(parsedNewSongStartTime == nil || player.songs.count >= maxSongs)
+                                }
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
+                } else {
+                    Text("Connect Spotify on the main screen to search and save songs from inside the app.")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section("Add Walkup Song Manually") {
                 TextField("Paste Spotify track link or URI", text: $newSongInput)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -41,7 +91,7 @@ struct PlayerDetailView: View {
                     .foregroundStyle(.secondary)
 
                 Button("Add Song") {
-                    addSong()
+                    addSongManually()
                 }
                 .disabled(
                     cleanedSongInput.isEmpty ||
@@ -76,7 +126,7 @@ struct PlayerDetailView: View {
                                 Text(track.name)
                                     .font(.body)
 
-                                Text(track.artists.map(\.name).joined(separator: ", "))
+                                Text(track.artistLine)
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                             } else if failedSongs.contains(song.spotifyInput) {
@@ -139,7 +189,7 @@ struct PlayerDetailView: View {
         parseTimeToSeconds(newSongStartTimeText)
     }
 
-    private func addSong() {
+    private func addSongManually() {
         let value = cleanedSongInput
         guard !value.isEmpty else { return }
         guard player.songs.count < maxSongs else { return }
@@ -154,6 +204,23 @@ struct PlayerDetailView: View {
         )
 
         newSongInput = ""
+        newSongStartTimeText = "0:00"
+    }
+
+    private func addSong(from track: SpotifyTrack) {
+        guard player.songs.count < maxSongs else { return }
+        guard let startTimeSeconds = parsedNewSongStartTime else { return }
+
+        let spotifyInput = "spotify:track:\(track.id)"
+        player.songs.append(
+            WalkupSong(
+                spotifyInput: spotifyInput,
+                startTimeSeconds: startTimeSeconds
+            )
+        )
+        trackMetadata[spotifyInput] = track
+        searchText = ""
+        searchResults = []
         newSongStartTimeText = "0:00"
     }
 
@@ -201,6 +268,32 @@ struct PlayerDetailView: View {
                 print("Failed to fetch track metadata for \(input): \(error)")
             }
         }
+    }
+
+    private func runTrackSearch() async {
+        guard let token = spotifyAuth.accessToken, !token.isEmpty else {
+            searchError = "Connect Spotify first."
+            return
+        }
+
+        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        isSearching = true
+        searchError = nil
+
+        do {
+            searchResults = try await SpotifyService.searchTracks(query: trimmed, accessToken: token)
+            if searchResults.isEmpty {
+                searchError = "No matching tracks found."
+            }
+        } catch {
+            searchResults = []
+            searchError = "Spotify search failed."
+            print("Spotify search failed: \(error)")
+        }
+
+        isSearching = false
     }
 
     private func formattedTime(_ seconds: Double) -> String {

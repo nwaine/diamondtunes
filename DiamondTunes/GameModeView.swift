@@ -1,24 +1,14 @@
-//
-//  GameModeView.swift
-//  DiamondTunes
-//
-//  Created by Nick Waine on 4/15/26.
-//
-
 import SwiftUI
 import SwiftData
 
 private let clipDuration: Double = 15.0
-private let fadeDuration: Double = 3.0
-private let assumedNormalVolume = 100
 
 struct GameModeView: View {
-    @Query(sort: \Player.battingOrder) private var players: [Player]
-    @Environment(\.modelContext) private var context
-    @Environment(\.editMode) private var editMode
-    @EnvironmentObject private var spotifyAuth: SpotifyAuthManager
+    let lineup: [Player]
 
+    @EnvironmentObject private var spotifyAuth: SpotifyAuthManager
     @State private var currentPlayingPlayerID: PersistentIdentifier?
+    @State private var currentTrack: SpotifyTrack?
     @State private var playbackProgress: Double = 0
     @State private var playbackTask: Task<Void, Never>?
     @State private var showDeviceWarning = false
@@ -26,20 +16,42 @@ struct GameModeView: View {
     var body: some View {
         List {
             Section {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 12) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Game Mode")
                             .font(.largeTitle)
                             .fontWeight(.bold)
                             .foregroundStyle(AppTheme.textPrimary)
 
-                        Text(
-                            editMode?.wrappedValue.isEditing == true
-                            ? "Drag players into batting order."
-                            : "Tap a player to trigger walk-up music."
+                        Text("Tap a player to trigger walk-up music.")
+                            .font(.subheadline)
+                            .foregroundStyle(AppTheme.textSecondary)
+                    }
+
+                    if let currentTrack {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Now Playing")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(AppTheme.textSecondary)
+
+                            Text(currentTrack.name)
+                                .font(.headline)
+                                .foregroundStyle(AppTheme.textPrimary)
+
+                            Text(currentTrack.artistLine)
+                                .font(.subheadline)
+                                .foregroundStyle(AppTheme.textSecondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                        .background(
+                            RoundedRectangle(cornerRadius: 18)
+                                .fill(AppTheme.surface)
                         )
-                        .font(.subheadline)
-                        .foregroundStyle(AppTheme.textSecondary)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 18)
+                                .stroke(AppTheme.border, lineWidth: 1)
+                        )
                     }
 
                     if showDeviceWarning {
@@ -62,14 +74,14 @@ struct GameModeView: View {
                 .listRowBackground(Color.clear)
             }
 
-            if players.isEmpty {
+            if lineup.isEmpty {
                 Section {
                     VStack(spacing: 12) {
-                        Text("No players in roster")
+                        Text("No players in today's lineup")
                             .font(.headline)
                             .foregroundStyle(AppTheme.textPrimary)
 
-                        Text("Add players before starting game mode.")
+                        Text("Go back and choose the players who are actually at the game.")
                             .font(.subheadline)
                             .foregroundStyle(AppTheme.textSecondary)
                             .multilineTextAlignment(.center)
@@ -79,13 +91,13 @@ struct GameModeView: View {
                 }
             } else {
                 Section("Lineup") {
-                    ForEach(players) { player in
+                    ForEach(Array(lineup.enumerated()), id: \.element.persistentModelID) { index, player in
                         HStack(spacing: 14) {
                             ZStack {
                                 Circle()
                                     .fill(AppTheme.lineupBadgeFill)
 
-                                Text("\(player.battingOrder + 1)")
+                                Text("\(index + 1)")
                                     .font(.subheadline)
                                     .fontWeight(.bold)
                                     .foregroundStyle(AppTheme.lineupBadgeText)
@@ -97,55 +109,57 @@ struct GameModeView: View {
                                     .font(.headline)
                                     .foregroundStyle(AppTheme.textPrimary)
 
-                                Text("\(player.songs.count) song\(player.songs.count == 1 ? "" : "s")")
-                                    .font(.subheadline)
-                                    .foregroundStyle(AppTheme.textSecondary)
+                                if isCurrentlyPlaying(player), let currentTrack {
+                                    Text("\(currentTrack.name) • \(currentTrack.artistLine)")
+                                        .font(.subheadline)
+                                        .foregroundStyle(AppTheme.blue)
+                                        .lineLimit(1)
+                                } else {
+                                    Text("\(player.songs.count) song\(player.songs.count == 1 ? "" : "s")")
+                                        .font(.subheadline)
+                                        .foregroundStyle(AppTheme.textSecondary)
+                                }
                             }
 
                             Spacer()
 
-                            if editMode?.wrappedValue.isEditing == true {
-                                Image(systemName: "line.3.horizontal")
-                                    .foregroundStyle(AppTheme.textSecondary)
-                            } else {
-                                Button {
-                                    Task {
-                                        if isCurrentlyPlaying(player) {
-                                            await stopPlaybackWithFade()
-                                        } else {
-                                            await playWalkup(for: player)
-                                        }
+                            Button {
+                                Task {
+                                    if isCurrentlyPlaying(player) {
+                                        await stopPlayback()
+                                    } else {
+                                        await playWalkup(for: player)
                                     }
-                                } label: {
-                                    ZStack {
-                                        Circle()
-                                            .fill(Color.white)
-
-                                        Circle()
-                                            .stroke(AppTheme.controlRingTrack, lineWidth: 4)
-
-                                        if isCurrentlyPlaying(player) {
-                                            Circle()
-                                                .trim(from: 0, to: playbackProgress)
-                                                .stroke(
-                                                    AppTheme.controlRingProgress,
-                                                    style: StrokeStyle(lineWidth: 4, lineCap: .round)
-                                                )
-                                                .rotationEffect(.degrees(-90))
-
-                                            Image(systemName: "stop.fill")
-                                                .font(.system(size: 14, weight: .bold))
-                                                .foregroundStyle(AppTheme.controlIcon)
-                                        } else {
-                                            Image(systemName: "play.fill")
-                                                .font(.system(size: 14, weight: .bold))
-                                                .foregroundStyle(AppTheme.controlIcon)
-                                        }
-                                    }
-                                    .frame(width: 42, height: 42)
                                 }
-                                .buttonStyle(.plain)
+                            } label: {
+                                ZStack {
+                                    Circle()
+                                        .fill(Color.white)
+
+                                    Circle()
+                                        .stroke(AppTheme.controlRingTrack, lineWidth: 4)
+
+                                    if isCurrentlyPlaying(player) {
+                                        Circle()
+                                            .trim(from: 0, to: playbackProgress)
+                                            .stroke(
+                                                AppTheme.controlRingProgress,
+                                                style: StrokeStyle(lineWidth: 4, lineCap: .round)
+                                            )
+                                            .rotationEffect(.degrees(-90))
+
+                                        Image(systemName: "stop.fill")
+                                            .font(.system(size: 14, weight: .bold))
+                                            .foregroundStyle(AppTheme.controlIcon)
+                                    } else {
+                                        Image(systemName: "play.fill")
+                                            .font(.system(size: 14, weight: .bold))
+                                            .foregroundStyle(AppTheme.controlIcon)
+                                    }
+                                }
+                                .frame(width: 42, height: 42)
                             }
+                            .buttonStyle(.plain)
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 10)
@@ -160,7 +174,6 @@ struct GameModeView: View {
                         .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
                         .listRowBackground(Color.clear)
                     }
-                    .onMove(perform: movePlayers)
                 }
             }
         }
@@ -169,26 +182,10 @@ struct GameModeView: View {
         .background(AppTheme.background)
         .navigationTitle("Game Mode")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                EditButton()
-            }
-        }
         .onDisappear {
             playbackTask?.cancel()
             playbackTask = nil
         }
-    }
-
-    private func movePlayers(from source: IndexSet, to destination: Int) {
-        var reordered = players
-        reordered.move(fromOffsets: source, toOffset: destination)
-
-        for (index, player) in reordered.enumerated() {
-            player.battingOrder = index
-        }
-
-        try? context.save()
     }
 
     private func isCurrentlyPlaying(_ player: Player) -> Bool {
@@ -220,6 +217,8 @@ struct GameModeView: View {
         playbackTask = nil
 
         do {
+            let track = try? await SpotifyService.fetchTrack(trackID: trackID, accessToken: token)
+
             try await SpotifyService.playTrack(
                 trackURI: trackURI,
                 positionMS: startMS,
@@ -228,6 +227,7 @@ struct GameModeView: View {
 
             await MainActor.run {
                 currentPlayingPlayerID = player.persistentModelID
+                currentTrack = track
                 playbackProgress = 0
                 showDeviceWarning = false
             }
@@ -247,9 +247,6 @@ struct GameModeView: View {
 
         playbackTask = Task {
             let startedAt = Date()
-            let fadeStartTime = max(clipDuration - fadeDuration, 0)
-            var lastVolumeSent = assumedNormalVolume
-            var volumeControlAvailable = true
 
             while !Task.isCancelled {
                 let elapsed = Date().timeIntervalSince(startedAt)
@@ -260,25 +257,6 @@ struct GameModeView: View {
                     playbackProgress = progress
                 }
 
-                if volumeControlAvailable && elapsed >= fadeStartTime {
-                    let fadeElapsed = min(elapsed - fadeStartTime, fadeDuration)
-                    let fadeFraction = fadeDuration > 0 ? pow(fadeElapsed / fadeDuration, 1.5) : 1.0
-                    let targetVolume = Int(Double(assumedNormalVolume) * (1.0 - fadeFraction))
-
-                    if targetVolume != lastVolumeSent {
-                        do {
-                            try await SpotifyService.setPlaybackVolume(
-                                volumePercent: max(0, targetVolume),
-                                accessToken: accessToken
-                            )
-                            lastVolumeSent = targetVolume
-                        } catch {
-                            print("Volume fading unavailable on this device: \(error)")
-                            volumeControlAvailable = false
-                        }
-                    }
-                }
-
                 if elapsed >= clipDuration {
                     do {
                         try await SpotifyService.pausePlayback(accessToken: accessToken)
@@ -286,19 +264,9 @@ struct GameModeView: View {
                         print("Auto-stop failed: \(error)")
                     }
 
-                    if volumeControlAvailable {
-                        do {
-                            try await SpotifyService.setPlaybackVolume(
-                                volumePercent: assumedNormalVolume,
-                                accessToken: accessToken
-                            )
-                        } catch {
-                            print("Volume reset failed: \(error)")
-                        }
-                    }
-
                     await MainActor.run {
                         currentPlayingPlayerID = nil
+                        currentTrack = nil
                         playbackProgress = 0
                     }
 
@@ -311,7 +279,7 @@ struct GameModeView: View {
         }
     }
 
-    private func stopPlaybackWithFade() async {
+    private func stopPlayback() async {
         guard let token = spotifyAuth.accessToken else {
             print("No Spotify token")
             return
@@ -328,6 +296,7 @@ struct GameModeView: View {
 
         await MainActor.run {
             currentPlayingPlayerID = nil
+            currentTrack = nil
             playbackProgress = 0
         }
     }

@@ -1,10 +1,3 @@
-//
-//  Content View.swift
-//  DiamondTunes
-//
-//  Created by Nick Waine on 4/15/26.
-//
-
 import SwiftUI
 import SwiftData
 
@@ -41,10 +34,16 @@ struct ContentView: View {
                             .fontWeight(.semibold)
                             .foregroundStyle(AppTheme.textPrimary)
 
-                        if let token = spotifyAuth.accessToken, !token.isEmpty {
+                        if spotifyAuth.isConnected {
                             Label("Connected to Spotify", systemImage: "checkmark.circle.fill")
                                 .foregroundStyle(AppTheme.success)
                                 .font(.subheadline.weight(.semibold))
+
+                            if let connectedText = spotifyAuth.connectionStatusText {
+                                Text(connectedText)
+                                    .font(.caption)
+                                    .foregroundStyle(AppTheme.textSecondary)
+                            }
                         } else {
                             Button {
                                 spotifyAuth.startLogin()
@@ -66,6 +65,10 @@ struct ContentView: View {
                                 Text("Waiting for Spotify login...")
                                     .font(.caption)
                                     .foregroundStyle(AppTheme.textSecondary)
+                            } else {
+                                Text("Once you connect once, the app will restore your Spotify session automatically on future launches.")
+                                    .font(.caption)
+                                    .foregroundStyle(AppTheme.textSecondary)
                             }
                         }
                     }
@@ -75,11 +78,11 @@ struct ContentView: View {
 
                 Section {
                     NavigationLink {
-                        GameModeView()
+                        TodayLineupView()
                     } label: {
                         HStack(spacing: 10) {
-                            Image(systemName: "play.fill")
-                            Text("Start Game Mode")
+                            Image(systemName: "list.number")
+                            Text("Set Today's Lineup")
                                 .fontWeight(.semibold)
 
                             Spacer()
@@ -189,6 +192,7 @@ struct ContentView: View {
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
                 normalizeBattingOrderIfNeeded()
+                spotifyAuth.restoreSessionIfPossible()
             }
             .alert(
                 "Remove Player?",
@@ -220,38 +224,19 @@ struct ContentView: View {
             battingOrder: players.count
         )
         context.insert(newPlayer)
-
-        do {
-            try context.save()
-        } catch {
-            print("Failed to save player: \(error)")
-        }
+        try? context.save()
     }
 
     private func deletePlayer(_ player: Player) {
         context.delete(player)
-
-        do {
-            try context.save()
-            normalizeBattingOrderIfNeeded()
-        } catch {
-            print("Failed to delete player: \(error)")
-        }
+        try? context.save()
+        normalizeBattingOrderIfNeeded()
     }
 
     private func normalizeBattingOrderIfNeeded() {
-        let sorted = players.sorted { $0.battingOrder < $1.battingOrder }
-
-        for (index, player) in sorted.enumerated() {
-            if player.battingOrder != index {
-                player.battingOrder = index
-            }
+        for (index, player) in players.enumerated() where player.battingOrder != index {
+            player.battingOrder = index
         }
-
-        do {
-            try context.save()
-        } catch {
-            print("Failed to normalize batting order: \(error)")
-        }
+        try? context.save()
     }
 }

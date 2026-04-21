@@ -1,18 +1,23 @@
-//
-//  SpotifyModels.swift
-//  DiamondTunes
-//
-//  Created by Nick Waine on 4/16/26.
-//
-
 import Foundation
 
-struct SpotifyTrack: Decodable {
+struct SpotifyTrack: Decodable, Hashable {
     let id: String
     let name: String
     let artists: [SpotifyArtist]
+
+    var artistLine: String {
+        artists.map(\.name).joined(separator: ", ")
+    }
 }
 
-struct SpotifyArtist: Decodable {
+struct SpotifyArtist: Decodable, Hashable {
     let name: String
+}
+
+struct SpotifySearchResponse: Decodable {
+    let tracks: SpotifyTrackPage
+}
+
+struct SpotifyTrackPage: Decodable {
+    let items: [SpotifyTrack]
 }
