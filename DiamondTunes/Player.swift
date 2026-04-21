@@ -18,6 +18,19 @@ struct WalkupSong: Codable, Hashable {
     }
 }
 
+struct BreakSong: Identifiable, Codable, Hashable {
+    var id = UUID()
+    var trackURI: String
+    var trackName: String
+    var artistName: String
+}
+
+struct BreakSongCategory: Identifiable, Codable, Hashable {
+    var id = UUID()
+    var name: String
+    var songs: [BreakSong] = []
+}
+
 @Model
 final class Player {
     var name: String
